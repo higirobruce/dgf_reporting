@@ -110,7 +110,7 @@ $query = "SELECT * from (
     left join (Select max(debut) debut, ncp from prod.bkautc group by ncp) b on a.ncp=b.ncp
     left join (Select max(fin) fin,debut, ncp from prod.bkautc group by ncp,debut) c on c.ncp = b.ncp and b.debut=c.debut
     left join prod.bkautc aut on aut.ncp = c.ncp and aut.debut = c.debut and aut.fin=c.fin
-    left join prod.bksld intsus on a.cli = intsus.cli and intsus.cha in ('298200','291115') and intsus.dco=?
+    left join prod.bksld intsus on a.cli = intsus.cli and intsus.cha in ('298200','291115','298330') and intsus.dco=?
     left join prod.bktau taux on taux.dev = a.dev and taux.dco = ?
     Left Join prod.Bkaco Ac On Ac.Ncp=a.Ncp and ac.age=a.age
     left join (
@@ -228,9 +228,18 @@ unset($age_name);
 
 $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
-        array_chunk($ncp, 1),
+        array_chunk($cha, 1),
         null,
         'B6'
+    );
+unset($cha);
+
+
+$objPHPExcel->setActiveSheetIndex(0)
+    ->fromArray(
+        array_chunk($ncp, 1),
+        null,
+        'C6'
     );
 unset($ncp);
 
@@ -238,7 +247,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($currency, 1),
         null,
-        'C6'
+        'D6'
     );
 unset($currency);
 
@@ -246,7 +255,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($cli_id, 1),
         null,
-        'D6'
+        'E6'
     );
 unset($cli_id);
 
@@ -254,7 +263,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($names, 1),
         null,
-        'E6'
+        'F6'
     );
 unset($names);
 
@@ -262,7 +271,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($maut, 1),
         null,
-        'F6'
+        'G6'
     );
 unset($maut);
 
@@ -270,7 +279,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($balance, 1),
         null,
-        'G6'
+        'H6'
     );
 unset($balance);
 
@@ -278,7 +287,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($inter_susp, 1),
         null,
-        'H6'
+        'I6'
     );
 unset($inter_susp);
 
@@ -302,7 +311,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($tau, 1),
         null,
-        'K6'
+        'L6'
     );
 unset($tau);
 
@@ -310,7 +319,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($net_a_provisioner, 1),
         null,
-        'L6'
+        'M6'
     );
 unset($net_a_provisioner);
 
@@ -318,7 +327,7 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($class, 1),
         null,
-        'M6'
+        'N6'
     );
 unset($class);
 
@@ -326,17 +335,9 @@ $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
         array_chunk($ndaysarr, 1),
         null,
-        'N6'
-    );
-unset($ndaysarr);
-
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($cha, 1),
-        null,
         'O6'
     );
-unset($cha);
+unset($ndaysarr);
 
 $months_names = array();
 
