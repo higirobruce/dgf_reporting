@@ -80,12 +80,12 @@ main.int_imp_npl,
 main.prov_int,
 main.newcla,
 main.ndaysarr,
-nvl(main.loan_amount,aut.maut) LOAN_AMOUNT,
+nvl(main.loan_amount * exRate.tind,aut.maut * exRate.tind) LOAN_AMOUNT,
 nvl(main.start_date,aut.debut) START_DATE,
 nvl(main.end_date,aut.fin) END_DATE,
 nvl(main.tau, k.tau) TAU,
 nvl(nvl(main.LIBE,aut.LIBT),'AUTRES CREDITS M.T') LIBE,
-inst.map installment,
+inst.map * exRate.tind installment,
 chap.lib cha_lib from (
     select 
     distinct
@@ -176,7 +176,7 @@ where a.dco=?)
     where cpt.nat='004'
     ) dos_2 on main.ncp=dos_2.ncp
 ) main
-
+left join prod.bktau exRate on exRate.dev = main.dev and exRate.dco=?
 left join (Select ncp,maut,debut,fin, 'CREDIT MARCHE' LIBT from prod.bkautc) aut on main.ncp = aut.ncp
 Left Join prod.Bkaco Ac On Ac.Ncp=main.Ncp
 left join (
@@ -257,7 +257,7 @@ $prov_int = array();
 if ($stmt->execute(array(
     $dco,$dco,$dco,
     $dco,$dco,$dco,
-    $dco,$dco
+    $dco,$dco,$dco
 ))){
     $i = 0;
     $j = 0;
