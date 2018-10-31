@@ -78,6 +78,7 @@ main.cap_imp_npl,
 main.com_imp_npl,
 main.int_imp_npl,
 main.prov_int,
+main.agio_cdt_march,
 main.newcla,
 main.ndaysarr,
 nvl(main.loan_amount * exRate.tind,aut.maut * exRate.tind) LOAN_AMOUNT,
@@ -100,7 +101,7 @@ chap.lib cha_lib from (
 distinct
 b.age,b.cli,b.nomrest,a.ncp,a.cha,a.dev,a.sdecv,cap.sdecv cap_imp,interet.sdecv int_imp,
 commis.sdecv comm_imp,cap_npl.sdecv cap_imp_npl, com_npl.sdecv com_imp_npl, int_npl.sdecv int_imp_npl ,cl.newcla,
-cl.ndaysarr,prov_int.sdecv prov_int
+cl.ndaysarr,prov_int.sdecv prov_int,agio_cd_march.sdecv agio_cdt_march
 from prod.bksld a
 join prod.bkcli b on trim(a.cli) = trim(b.cli)
 and a.cha in ('211100','211110','211120','211180','211190',
@@ -114,7 +115,7 @@ and a.cha in ('211100','211110','211120','211180','211190',
 '241020','241040','241070','241080','241090',
 '241091','241110','241120','241140','241170',
 '241180','241190','241191','241610','241900',
-'242010','243000','291330','219010',
+'242010','243000','291330',
 '291430','291530','291120','291220','291320',
 '291450','291550','291340','291440','291540',
 '291410','291510','291610','213122'
@@ -151,6 +152,10 @@ left join (SELECT cli,sum(sdecv) sdecv from prod.bksld where dco=?
 and cha in ('291490','291590','291390') and sde<0
 group by cli) int_npl on int_npl.cli = a.cli
 
+left join (SELECT cli,sum(sdecv) sdecv from prod.bksld where dco=?
+and cha in ('219010') and sde<0
+group by cli) agio_cd_march on agio_cd_march.cli = a.cli
+
 left join PROD.MISNEWCLASSFINAL cl on trim(a.cli) = trim(cl.cli)
 where a.dco=?)
     ) main
@@ -159,20 +164,21 @@ where a.dco=?)
     (
     select 
     distinct
-    cpt.ncp,dos.eve,
-    dos_2.mon loan_amount
-    ,dos_2.dmep start_date,
-    dos_2.ddec end_date, dos_2.tau_int tau, typrt.LIBE
+    cpt.ncp,dossier.eve,
+    dossier.mon loan_amount
+    ,dossier.dmep start_date,
+    dossier.ddec end_date, dossier.tau_int tau, typrt.LIBE
     from prod.bkcptprt cpt 
-    join prod.mis_bkdosprteom dos on dos.eve=cpt.eve and dos.ave=cpt.ave and dos.ctr in ('1','5') and dos.eta='VA'
-    join (select cli,typ,max(ddec) ddec from prod.mis_bkdosprteom 
+    left join prod.mis_bkdosprteom dos on dos.eve=cpt.eve and dos.ave=cpt.ave and dos.ctr in ('1','5') and dos.eta='VA'
+    left join (select cli,typ,max(ddec) ddec from prod.mis_bkdosprteom 
         where ctr in ('1','5') and eta='VA' group by cli, typ) dos_1 on dos_1.cli = dos.cli and dos_1.typ = dos.typ 
-    join (select cli,typ,max(dmep) dmep,ddec from prod.mis_bkdosprteom 
+    left join (select cli,typ,max(dmep) dmep,ddec from prod.mis_bkdosprteom 
         where ctr in ('1','5') and eta='VA' group by cli, typ, ddec) dos_3 on dos_3.cli = dos.cli and dos_3.typ = dos.typ and dos_3.ddec=dos_1.ddec
-    join PROD.MIS_BKDOSPRTEOM dos_2 on dos_2.ddec = dos_1.ddec and dos_2.cli=dos_1.cli 
+    left join PROD.MIS_BKDOSPRTEOM dos_2 on dos_2.ddec = dos_1.ddec and dos_2.cli=dos_1.cli 
         and dos_2.ctr in ('1','5') and dos_2.eta='VA' and dos_2.typ = dos_1.typ 
         and dos_2.eve=dos.eve and dos_2.ave=dos.ave and dos_2.dmep=dos_3.dmep
-    join prod.bktyprt typrt on typrt.typ = dos_2.typ
+    left join prod.bktyprt typrt on typrt.typ = dos.typ
+    join prod.bkdosprt dossier on dossier.eve = cpt.eve and dossier.eve = cpt.eve
     where cpt.nat='004'
     ) dos_2 on main.ncp=dos_2.ncp
 ) main
@@ -222,7 +228,7 @@ where (sdecv<0 or
             com_imp_npl <>0 or int_imp_npl <>0 or prov_int <>0
     )
 ) )
-order by main.cli,main.ncp";
+order by main.cli,main.sdecv,main.ncp desc";
 
 $stmt = $pdo->prepare($query); 
 $arr = array();
@@ -253,11 +259,13 @@ $ndaysarr = array();
 $inst = array();
 $cha_lib = array();
 $prov_int = array();
+$agio_cdt_march = array();
 
 if ($stmt->execute(array(
     $dco,$dco,$dco,
     $dco,$dco,$dco,
-    $dco,$dco,$dco
+    $dco,$dco,$dco,
+    $dco
 ))){
     $i = 0;
     $j = 0;
@@ -273,18 +281,10 @@ if ($stmt->execute(array(
     $prev_int_npl = 0;
     $prev_amount = 0;
     $prev_prov_int = 0;
+    $prev_agio = 0;
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $lib[] = (string)trim($row['LIB']);
-        $age[] = (string)$row['AGE'];
-        $cli[] = (string)trim($row['CLI']);
-        $ncp[] = (string)$row['NCP'];
-        $nomrest[] = (string)trim($row['NOMREST']);
-        $dev[] = (int)$row['DEV'];  
-        $cha[] = $row['CHA'];
-        $newcla[] = $row['NEWCLA'];
-        $ndaysarr[] = $row['NDAYSARR'];
-        $inst[] = $row['INSTALLMENT'];
-        $cha_lib[] = $row['CHA_LIB'];
+
+        
 
         if( ($prev_cli == (string)trim($row['CLI']) && $prev_res == $row['SDECV'] && $prev_ncp == $row['NCP']) || $row['SDECV'] > 0 ){
             $sdecv[] =  0;
@@ -332,13 +332,31 @@ if ($stmt->execute(array(
             $cap_imp_npl[] =  0;
         } else{
             $cap_imp_npl[] =  abs((float)$row['CAP_IMP_NPL']);
-        } 
+        }
+        
+        if($prev_cli == (string)trim($row['CLI']) && $prev_agio == $row['AGIO_CDT_MARCH']){
+            $agio_cdt_march[] =  0;
+        } else{
+            $agio_cdt_march[] =  abs((float)$row['AGIO_CDT_MARCH']);
+        }
 
         if($prev_cli == (string)trim($row['CLI']) && $prev_amount == $row['LOAN_AMOUNT']){
             $loan_amount[] =  0;
         } else{
             $loan_amount[] =  abs((float)$row['LOAN_AMOUNT']);
         } 
+
+        $lib[] = (string)trim($row['LIB']);
+        $age[] = (string)$row['AGE'];
+        $cli[] = (string)trim($row['CLI']);
+        $ncp[] = (string)$row['NCP'];
+        $nomrest[] = (string)trim($row['NOMREST']);
+        $dev[] = (int)$row['DEV'];  
+        $cha[] = $row['CHA'];
+        $newcla[] = $row['NEWCLA'];
+        $ndaysarr[] = $row['NDAYSARR'];
+        $inst[] = $row['INSTALLMENT'];
+        $cha_lib[] = $row['CHA_LIB'];
 
         $start_date[] = $row['START_DATE'];
         $end_date[] = $row['END_DATE'];
@@ -356,6 +374,7 @@ if ($stmt->execute(array(
         $prev_int_npl = (float)$row['INT_IMP_NPL'];
         $prev_capn = (float)$row['CAP_IMP_NPL'];
         $prev_prov_int = (float)$row['PROV_INT'];
+        $prev_agio = (float)$row['AGIO_CDT_MARCH'];
     }
 }
 
@@ -495,9 +514,17 @@ unset($prov_int);
 
 $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
-    array_chunk($newcla, 1),
+    array_chunk($agio_cdt_march, 1),
     NULL,
     'P6'
+);
+unset($agio_cdt_march);
+
+$objPHPExcel->setActiveSheetIndex(0)
+->fromArray(
+    array_chunk($newcla, 1),
+    NULL,
+    'Q6'
 );
 unset($newcla);
 
@@ -505,7 +532,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($ndaysarr, 1),
     NULL,
-    'Q6'
+    'R6'
 );
 unset($ndaysarr);
 
@@ -513,7 +540,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($loan_amount, 1),
     NULL,
-    'R6'
+    'S6'
 );
 unset($loan_amount);
 
@@ -521,7 +548,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($start_date, 1),
     NULL,
-    'Y6'
+    'Z6'
 );
 unset($start_date);
 
@@ -529,7 +556,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($end_date, 1),
     NULL,
-    'Z6'
+    'AA6'
 );
 unset($end_date);
 
@@ -537,7 +564,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($tau, 1),
     NULL,
-    'U6'
+    'V6'
 );
 unset($tau);
 
@@ -545,14 +572,14 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($libe, 1),
     NULL,
-    'V6'
+    'W6'
 );
 
 $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($inst, 1),
     NULL,
-    'W6'
+    'X6'
 );
 unset($inst);
 
@@ -560,7 +587,7 @@ $objPHPExcel->setActiveSheetIndex(0)
 ->fromArray(
     array_chunk($cha_lib, 1),
     NULL,
-    'X6'
+    'Y6'
 );
 unset($cha_lib);
 

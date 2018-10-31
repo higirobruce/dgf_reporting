@@ -110,7 +110,7 @@ $query = "SELECT * from (
     left join (Select max(debut) debut, ncp from prod.bkautc group by ncp) b on a.ncp=b.ncp
     left join (Select max(fin) fin,debut, ncp from prod.bkautc group by ncp,debut) c on c.ncp = b.ncp and b.debut=c.debut
     left join prod.bkautc aut on aut.ncp = c.ncp and aut.debut = c.debut and aut.fin=c.fin
-    left join prod.bksld intsus on a.cli = intsus.cli and intsus.cha in ('298200','291115','298330') and intsus.dco=?
+    left join prod.bksld intsus on a.cli = intsus.cli and intsus.cha in ('298200','291115','298330','298331') and intsus.dco=?
     left join prod.bktau taux on taux.dev = a.dev and taux.dco = ?
     Left Join prod.Bkaco Ac On Ac.Ncp=a.Ncp and ac.age=a.age
     left join (
