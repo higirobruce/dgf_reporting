@@ -23,20 +23,20 @@
             let month_tl = document.getElementById('month_tl').value;
             let year_tl = document.getElementById('year_tl').value;
 
-            // document.getElementById('hidden_month_tl').value = month_tl;
-            // document.getElementById('hidden_year_tl').value = year_tl;
+            document.getElementById('hidden_month_tl').value = month_tl;
+            document.getElementById('hidden_year_tl').value = year_tl;
 
             let month_od = document.getElementById('month_od').value;
             let year_od = document.getElementById('year_od').value;
 
-            // document.getElementById('hidden_month_od').value = month_od;
-            // document.getElementById('hidden_year_od').value = year_od;
+            document.getElementById('hidden_month_od').value = month_od;
+            document.getElementById('hidden_year_od').value = year_od;
 
             let month_of = document.getElementById('month_of').value;
             let year_of = document.getElementById('year_of').value;
 
-            // document.getElementById('hidden_month_of').value = month_of;
-            // document.getElementById('hidden_year_of').value = year_of;
+            document.getElementById('hidden_month_of').value = month_of;
+            document.getElementById('hidden_year_of').value = year_of;
 
 
         });
@@ -45,28 +45,28 @@
             let month_tl = document.getElementById('month_tl').value;
             let year_tl = document.getElementById('year_tl').value;
 
-            // document.getElementById('hidden_month_tl').value = month_tl;
-            // document.getElementById('hidden_year_tl').value = year_tl;
+            document.getElementById('hidden_month_tl').value = month_tl;
+            document.getElementById('hidden_year_tl').value = year_tl;
 
             let month_od = document.getElementById('month_od').value;
             let year_od = document.getElementById('year_od').value;
 
-            // document.getElementById('hidden_month_od').value = month_od;
-            // document.getElementById('hidden_year_od').value = year_od;
+            document.getElementById('hidden_month_od').value = month_od;
+            document.getElementById('hidden_year_od').value = year_od;
 
             let month_of = document.getElementById('month_of').value;
             let year_of = document.getElementById('year_of').value;
 
-            // document.getElementById('hidden_month_of').value = month_of;
-            // document.getElementById('hidden_year_of').value = year_of;
+            document.getElementById('hidden_month_of').value = month_of;
+            document.getElementById('hidden_year_of').value = year_of;
 
 
-            // console.log(month_tl);
-            // console.log(year_tl);
-            // console.log(month_od);
-            // console.log(year_od);
-            // console.log(month_of);
-            // console.log(year_of);
+            console.log(month_tl);
+            console.log(year_tl);
+            console.log(month_od);
+            console.log(year_od);
+            console.log(month_of);
+            console.log(year_of);
         }
     </script>
     <title>Loan Book</title>
@@ -98,7 +98,7 @@
                         <strong>Term Loans</strong>
                     </div>
                     <div class="panel-body">
-                        <form action="download_loans_ifrs.php" method="POST">
+                        <form action="download_loans_ifrs.php" method="GET">
                             <div class="row form-group">
                                 <div class="col-md-6">
                                     <label for="ndt2">Select the month</label>
@@ -143,6 +143,19 @@
                             </div>
 
                         </form>
+                        <br>
+                        <form action="insert_loans_ifrs.php" method="GET">
+                            <input type="hidden" id="hidden_month_tl" name="hidden_month_tl">
+                            <input type="hidden" id="hidden_year_tl" name="hidden_year_tl">
+                            <button class="btn btn-default btn-block" name="save">Save TL - CONTLOAN data</button>
+
+                            <div class="container">
+                                <div class="row">
+
+                                </div>
+                            </div>
+
+                        </form>
                     </div>
                 </div>
 
@@ -156,7 +169,7 @@
                         <strong>Overdrafts</strong>
                     </div>
                     <div class="panel-body">
-                        <form action="download_ods_ifrs.php" method="POST">
+                        <form action="download_ods_ifrs.php" method="GET">
                             <div class="row form-group">
                                 <div class="col-md-6">
                                     <label for="ndt2">Select the month</label>
@@ -201,6 +214,19 @@
                             </div>
 
                         </form>
+                        <br>
+                        <form action="insert_ods_ifrs.php" method="GET">
+                            <input type="hidden" id="hidden_month_od" name="hidden_month_od">
+                            <input type="hidden" id="hidden_year_od" name="hidden_year_od">
+                            <button class="btn btn-default btn-block" name="save">Save OD - CONTLOAN data</button>
+
+                            <div class="container">
+                                <div class="row">
+
+                                </div>
+                            </div>
+
+                        </form>
                     </div>
                 </div>
 
@@ -214,7 +240,7 @@
                         <strong>Off Balance-sheet</strong>
                     </div>
                     <div class="panel-body">
-                        <form action="download_offbs_ifrs.php" method="POST">
+                        <form action="download_offbs_ifrs.php" method="GET">
                             <div class="row form-group">
                                 <div class="col-md-6">
                                     <label for="ndt2">Select the month</label>
@@ -259,7 +285,19 @@
                             </div>
 
                         </form>
-                        
+                        <br>
+                        <form action="insert_offbs_ifrs.php" method="GET">
+                            <input type="hidden" id="hidden_month_of" name="hidden_month_of">
+                            <input type="hidden" id="hidden_year_of" name="hidden_year_of">
+                            <button class="btn btn-default btn-block" name="save">Save OFB - CONTLOAN data</button>
+
+                            <div class="container">
+                                <div class="row">
+
+                                </div>
+                            </div>
+
+                        </form>
                     </div>
                 </div>
 

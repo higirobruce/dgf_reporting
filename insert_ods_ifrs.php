@@ -60,15 +60,17 @@ $pdo = new PDO('oci:dbname=192.168.0.20:1521/cgbk', 'CLEARINGUSER2017', 'CLEARIN
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
 
 //dco
-if (isset($_POST['month_od'])) {
-    $month = $_POST['month_od'];
-    $year = $_POST['year_od'];
+if (isset($_GET['hidden_month_od'])) {
+    $month = $_GET['hidden_month_od'];
+    $year = $_GET['hidden_year_od'];
+    print($month);
 } else {
-    $month = 6;
-    $year = 2018;
+    $month = 03;
+    $year = 2021;
 }
 
-$q_dco = $pdo->prepare("SELECT TO_CHAR(max(dco),'DD-MON-YYYY') d from prod.bksld where cha like '205%' and prod.month(dco)=? and prod.year(dco)=?");
+
+$q_dco = $pdo->prepare("SELECT TO_CHAR(max(dco),'DD-MON-YYYY') d , prod.month(max(dco)) mon, prod.year(max(dco)) yr from prod.bksld where cha like '205%' and prod.month(dco)=? and prod.year(dco)=?");
 $q_dco_tau = $pdo->prepare("SELECT TO_CHAR(max(dco),'DD-MON-YYYY') d from prod.bktau where prod.month(dco)=? and prod.year(dco)=?");
 
 $q_dco->execute(array($month, $year));
@@ -77,6 +79,8 @@ $q_dco_tau->execute(array($month, $year));
 $r = $q_dco->fetch(PDO::FETCH_ASSOC);
 $r_tau = $q_dco_tau->fetch(PDO::FETCH_ASSOC);
 $dco = $r['D'];
+$dco_month = $r['MON'];
+$dco_year = $r['YR'];
 $dco_tau = $r_tau['D'];
 
 // CHA
@@ -84,11 +88,14 @@ $query = "SELECT *
 FROM (SELECT a.age_name,
              a.ncp,
              a.currency,
+             a.ncp||a.age||a.currency contract_id,
              TRIM(a.cli)                 cli_id,
              a.nomrest                   names,
-             nvl(aut.maut * taux.tind,0.0)        maut,
+             case when nvl(aut.maut * taux.tind,0.0)=0 then abs(a.balance)
+             else nvl(aut.maut * taux.tind,0.0) end as maut,
              a.balance,
-             nvl(SUM(intsus.sdecv),0.0)           inter_susp,
+             a.balance_fcy,
+             nvl(intsus.sdecv,0)           inter_susp,
              case
                when b.debut is not null then b.debut
                when b.debut is null and (a.class in (1, 2) or a.class is null) then sysdate - 365
@@ -106,7 +113,9 @@ FROM (SELECT a.age_name,
              nvl(a.ndaysarr, 0) ndaysarr,
              a.cha,
              seg.segment,
-             a.age
+             a.age,
+             prov_held.sdecv prov_held,
+             nvl(col.collat,0) collateral
       FROM (SELECT a.cli,
                    a.ncp,
                    c.nomrest,
@@ -119,19 +128,24 @@ FROM (SELECT a.age_name,
                      WHEN a.dev = '978' THEN 'EUR'
                      WHEN a.dev = '826' THEN 'GBP'
                        END     currency,
+                    CASE 
+                        WHEN a.dev <> '646' THEN a.sde
+                        ELSE 0 END balance_fcy,
                    a.sdecv     balance,
-                   b.newcla    class,
-                   b.ndaysarr  ndaysarr,
+                  nvl(cl.newcla,b.newcla)    class,
+                 -- b.newcla,
+                  nvl(cl.ndaysarr,b.ndaysarr)  ndaysarr,
+                 -- b.ndaysarr,
                    a.dev,
                    a.dco
             FROM prod.bksld a
-                   LEFT JOIN prod.misnewclassfinal b ON a.cli = b.cli
                    JOIN prod.bkcli c ON a.cli = c.cli
-                   left join CLEARINGUSER.CLASSIFICATION_HIS cl
-                     on trim(c.cli) = trim(cl.cli) and cl.month = ? and cl.year = ?
+                  left join CLEARINGUSER.misnewclassfinal_his cl
+                    on trim(c.cli) = trim(cl.cli) and prod.month(cl.finmois) = ? and prod.year(cl.finmois) = ?
+                    LEFT JOIN prod.misnewclassfinal b ON a.cli = b.cli  and prod.year(b.finmois)=prod.year(a.dco) and prod.month(b.finmois) = prod.month(a.dco)
                    JOIN prod.bkage d ON a.age = d.age
-            WHERE --a.cli='0023678' and
-                a.dco = ?
+            WHERE --a.cli='0083048' and
+                a.dco=?
               AND
                 --a.sde<0 and
                 ((a.cha LIKE '201%'
@@ -152,14 +166,22 @@ FROM (SELECT a.age_name,
              LEFT JOIN prod.bkautc aut ON aut.ncp = c.ncp
                                             AND aut.debut = c.debut
                                             AND aut.fin = c.fin
-             LEFT JOIN prod.bksld intsus ON a.cli = intsus.cli
-                                              AND intsus.cha IN ('298200', '291115', '298330', '298331')
-                                              AND intsus.dco = ?
+             LEFT JOIN (SELECT cli, sum(sdecv) sdecv  from prod.bksld 
+                        where dco=? and SDECV>0 and cha IN ('298200', '291115', '298330', '298331') 
+                        group by cli                        
+                        ) intsus ON a.cli = intsus.cli
+                                              
              LEFT JOIN prod.bktau taux ON taux.dev = a.dev
-                                            AND taux.dco = ?
+                                            AND taux.dco=?
              LEFT JOIN prod.bkaco ac ON ac.ncp = a.ncp
                                           AND ac.age = a.age
              LEFT JOIN clearinguser.cli_segment seg ON TRIM(a.cli) = TRIM(seg.cli)
+
+             left join (select cli, SUM(sdecv) SDECV from prod.bksld where dco=?
+                        and cha ='299120' and sde>0 GROUP BY CLI) prov_held on trim(prov_held.cli) = trim(a.cli) --and a.balance<0
+            
+             left join (select cli,sum(round(ctvmon)) collat from prod.miscolatctv group by cli) col on trim(col.cli) = trim(a.cli)
+
              LEFT JOIN (SELECT a.age,
                                a.lien,
                                a.datr,
@@ -179,7 +201,7 @@ FROM (SELECT a.age_name,
                           AND a.lien = b.lien
                           AND a.datr = b.datr) k ON k.lien = ac.lien
                                                       AND k.age = ac.age
-      group by a.age_name, a.ncp, a.currency, TRIM(a.cli), a.nomrest,
+      group by nvl(intsus.sdecv,0) ,a.age_name, a.ncp, a.currency, TRIM(a.cli), a.nomrest,
                aut.maut * taux.tind, a.balance, case
                                                   when b.debut is not null then b.debut
                                                   when b.debut is null and (a.class in (1, 2) or a.class is null)
@@ -194,12 +216,13 @@ FROM (SELECT a.age_name,
                                                                                             then sysdate - (365)
                                                                                     else sysdate - (365 / 2) end,
                nvl(a.class, 6),
-               nvl(a.ndaysarr, 0), a.cha, seg.segment, a.age)
+               nvl(a.ndaysarr, 0), a.cha, seg.segment,prov_held.sdecv,
+             nvl(col.collat,0), a.age,a.balance_fcy, a.ncp||a.age||a.currency)
 WHERE (balance < 0
    OR (balance >= 0
          AND (maut IS NOT NULL
                 AND inter_susp <> 0
-                AND inter_susp IS NOT NULL))) --and cli_id='0083048'
+                AND inter_susp IS NOT NULL))) --and cli_id='0111947'
 ORDER BY cli_id,
          ncp";
 
@@ -211,6 +234,7 @@ $cli_id = array();
 $names = array();
 $maut = array();
 $balance = array();
+$balance_fcy = array();
 $inter_susp = array();
 $start_date = array();
 $end_date = array();
@@ -221,15 +245,19 @@ $net_a_provisioner = array();
 $cha = array();
 $segment = array();
 $age = array();
+$prov_held = array();
+$contract_id = array();
+$collateral = array();
 
 if ($stmt->execute(array(
-    $month, $year, $dco, $dco, $dco_tau,
+    $month, $year, $dco, $dco,$dco_tau, $dco
 ))) {
     $i = 0;
     $j = 0;
     $prev_inter = 0;
     $prev_cli = '';
     $prev_ncp = '';
+    $prev_balance = '';
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
         if ($prev_cli == $row['CLI_ID']) {
@@ -239,6 +267,7 @@ if ($stmt->execute(array(
         }
         if ($row['BALANCE'] >= 0) {
             $balance[] = 0;
+            $balance_fcy[] = 0;
             if ($row['CLASS'] == '1' || $row['CLASS'] == '2') {
                 $net_a_provisioner[] = abs($row['INTER_SUSP']);
             } else {
@@ -246,7 +275,7 @@ if ($stmt->execute(array(
             }
         } else {
             $balance[] = abs($row['BALANCE']);
-           
+            $balance_fcy[] = abs($row['BALANCE_FCY']);
             if ($row['CLASS'] == '1' || $row['CLASS'] == '2') {
                 $net_a_provisioner[] = abs($row['BALANCE']) + abs($row['INTER_SUSP']);
             } else {
@@ -254,13 +283,12 @@ if ($stmt->execute(array(
             }
         }
 
-        // $inter_susp[] = abs($row['INTER_SUSP']);
         $age_name[] = (string) trim($row['AGE_NAME']);
         $ncp[] = (string) trim($row['NCP']);
         $currency[] = (string) $row['CURRENCY'];
         $cli_id[] = (string) trim($row['CLI_ID']);
         $names[] = (string) trim($row['NAMES']);
-        $maut[] = (float) $row['MAUT'];
+        $maut[] = abs((float) $row['MAUT']);
         $start_date[] = $row['START_DATE'];
         $end_date[] = $row['END_DATE'];
         $tau[] = (float) $row['TAU'];
@@ -269,6 +297,10 @@ if ($stmt->execute(array(
         $cha[] = $row['CHA'];
         $segment[] = $row['SEGMENT'];
         $age[] = $row['AGE'];
+        $prov_held[] = $row['PROV_HELD'];
+        $contract_id[] = $row['CONTRACT_ID'];
+        $collateral[] = $row['COLLATERAL'];
+
         if (empty(end($ndaysarr))) {
             array_pop($ndaysarr);
             $ndaysarr[] = 0;
@@ -276,7 +308,8 @@ if ($stmt->execute(array(
 
         if ($prev_ncp == $row['NCP']
             || (end($maut) == 0 && end($balance) == 0 && end($inter_susp)==0)
-        ) {
+        )
+        {
             array_pop($age_name);
             array_pop($ncp);
             array_pop($currency);
@@ -284,6 +317,7 @@ if ($stmt->execute(array(
             array_pop($names);
             array_pop($maut);
             array_pop($balance);
+            array_pop($balance_fcy);
             array_pop($inter_susp);
             array_pop($start_date);
             array_pop($end_date);
@@ -294,184 +328,170 @@ if ($stmt->execute(array(
             array_pop($cha);
             array_pop($segment);
             array_pop($age);
+            array_pop($prov_held);
+            array_pop($contract_id);
+            array_pop($collateral);
         }
 
         $prev_cli = $row['CLI_ID'];
         $prev_inter = $row['INTER_SUSP'];
         $prev_ncp = $row['NCP'];
+        $prev_balance = $row['BALANCE'];
+
+        
     }
 }
 
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($age_name, 1),
-        null,
-        'A6'
-    );
-unset($age_name);
+// $q_delete = "DELETE FROM clearinguser.ifrs9_tloans  where doc_type=?";
+// $stmt_d = $pdo->prepare($q_delete);
+// $stmt_d->execute(array('OD'));
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($cha, 1),
-        null,
-        'B6'
-    );
-unset($cha);
+$number_of_rows = false;
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($ncp, 1),
-        null,
-        'C6'
-    );
-unset($ncp);
+//insert tloans
+for ($n = 0; $n < sizeof($names); $n++) {
+    $q_insert = "INSERT into clearinguser.ifrs9_tloans (
+        LIB,
+        AGE,
+        CLI,
+        NOMREST,
+        NCP,
+        CHA,
+        DEV,
+        SDE,
+        SDECV,
+        PROV_HELD,
+        NEWCLA,
+        NDAYSARR,
+        LOAN_AMOUNT,
+        INTEREST_DUE_FCY,
+        INTEREST_DUE_LCY,
+        CAPITAL_DUE_FCY,
+        CAPITAL_DUE_LCY,
+        LOAN_INCLUD_INTEREST,
+        DUE_AMOUNT,
+        START_DATE,
+        END_DATE,
+        TAU,
+        TAU_CO1,
+        TAU_CO2,
+        TAU_CO3,
+        TAU_FRA,
+        LIBE,
+        INSTALLMENT,
+        CHA_LIB,
+        CONTRACT_ID,
+        SEGMENT,
+        CATEGORY,
+        REP_FREQ,
+        DCO,
+        DOC_TYPE,
+        COLLATERAL,
+        REGULATORY_PROV,
+        INTEREST_SUSP
+        ) values (
+            ?,?,?,?,?,?,
+            ?,?,?,?,?,?,
+            ?,?,?,?,?,?,
+            ?,?,?,?,?,?,
+            ?,?,?,?,?,?,
+            ?,?,?,?,?,?,?,?
+            )";
+    $interest_due_lcy = 0;//$int_imp[$n]+$comm_imp[$n]+abs($int_imp_npl[$n])+abs($comm_imp_npl[$n])+$prov_int[$n]+$agio_cdt_march[$n];
+    $interest_due_fcy = 0;//$int_imp_fcy[$n]+$comm_imp_fcy[$n]+abs($int_imp_npl_fcy[$n])+abs($comm_imp_npl_fcy[$n])+$prov_int_fcy[$n]+$agio_cdt_march_fcy[$n];
+    $capital_due_lcy = 0;//$cap_imp[$n]+$cap_imp_npl[$n];
+    $capital_due_fcy = 0;//$cap_imp_fcy[$n]+$cap_imp_npl_fcy[$n];
+    $loan_includ_interest = $balance[$n]+$interest_due_lcy+$capital_due_lcy;
+    $amount_due =  $interest_due_lcy+$capital_due_lcy;
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($currency, 1),
-        null,
-        'D6'
-    );
-unset($currency);
+    $regulatory_prov = 0;
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($cli_id, 1),
-        null,
-        'E6'
-    );
-unset($cli_id);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($names, 1),
-        null,
-        'F6'
-    );
-unset($names);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($maut, 1),
-        null,
-        'G6'
-    );
-unset($maut);
+    $stmt = $pdo->prepare($q_insert);
+    $number_of_rows = $stmt->fetchColumn(); 
+    $stmt->execute(array(
+        $age_name[$n],
+        $age[$n],
+        $cli_id[$n],
+        $names[$n],
+        $ncp[$n],
+        $cha[$n],
+        $currency[$n],
+        $balance_fcy[$n],
+        $balance[$n],
+        $prov_held[$n],
+        $class[$n],
+        $ndaysarr[$n],
+        $maut[$n],
+        $interest_due_fcy,
+        $interest_due_lcy,
+        $capital_due_fcy,
+        $capital_due_lcy,
+        $loan_includ_interest,
+        $amount_due,
+        $start_date[$n],
+        $end_date[$n],
+        $tau[$n],
+        0,//$tau_co1[$n],
+        0,//$tau_co2[$n],
+        0,//$tau_co3[$n],
+        0,//$tau_fra[$n],
+        'OVERDRAFT',//$libe[$n],
+        0,//$inst[$n],
+        '-',//$cha_lib[$n],
+        $contract_id[$n],
+        $segment[$n],
+        'OVERDRAFT',//$loan_category[$n],
+        'IDF',//$rep_freq[$n],  
+        $dco,
+        'OD',
+        $collateral[$n],
+        $regulatory_prov,
+        $inter_susp[$n]
+    ));
+}
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($balance, 1),
-        null,
-        'H6'
-    );
-unset($balance);
+if ($stmt) 
+    { 
+        // it return number of rows in the table.
+          
+           if ($number_of_rows) 
+              { 
+                 printf("Number of row in the table : " . $number_of_rows); 
+              } 
+        // close the result. 
+        $stmt->closeCursor();
+    } 
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($inter_susp, 1),
-        null,
-        'I6'
-    );
-unset($inter_susp);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($start_date, 1),
-        null,
-        'Q6'
-    );
-unset($start_date);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($end_date, 1),
-        null,
-        'R6'
-    );
-unset($end_date);
+// if ($stmt) 
+//     { 
+//         // it return number of rows in the table.
+          
+//            if ($number_of_rows) 
+//               { 
+//                  printf("Number of row in the table : " . $number_of_rows); 
+//               } 
+//         // close the result. 
+//         $stmt->closeCursor();
+//     } 
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($tau, 1),
-        null,
-        'L6'
-    );
-unset($tau);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($net_a_provisioner, 1),
-        null,
-        'M6'
-    );
-unset($net_a_provisioner);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($class, 1),
-        null,
-        'N6'
-    );
-unset($class);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($ndaysarr, 1),
-        null,
-        'O6'
-    );
-unset($ndaysarr);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($segment, 1),
-        null,
-        'S6'
-    );
-unset($segment);
 
-$objPHPExcel->setActiveSheetIndex(0)
-    ->fromArray(
-        array_chunk($age, 1),
-        null,
-        'T6'
-    );
-unset($age);
+    
 
-$months_names = array();
 
-$months_names[0] = 'January';
-$months_names[1] = 'February';
-$months_names[2] = 'March';
-$months_names[3] = 'April';
-$months_names[4] = 'May';
-$months_names[5] = 'June';
-$months_names[6] = 'July';
-$months_names[7] = 'August';
-$months_names[8] = 'September';
-$months_names[9] = 'October';
-$months_names[10] = 'November';
-$months_names[11] = 'December';
+$pdo = null;
+$response = new stdClass();
 
-// Set active sheet index to the first sheet, so Excel opens this as the first sheet
-$objPHPExcel->setActiveSheetIndex(0);
-$objPHPExcel->getActiveSheet()->setCellValue('A1', 'Overdrafts as of the end of ' . $months_names[$month - 1] . ' ' . $year . '.');
+$response->result=true;
+$response->message = 'Successful';
 
-// Redirect output to a client’s web browser (Excel2007)
-header('Access-Control-Allow-Origin: *');
-header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-header('Content-Disposition: attachment;filename="Overdrafts ' . $months_names[$month - 1] . '-' . $year . '.xlsx');
-header('Cache-Control: max-age=0');
-// If you're serving to IE 9, then the following may be needed
-header('Cache-Control: max-age=1');
 
-// If you're serving to IE over SSL, then the following may be needed
-header('Expires: Mon, 26 Jul 1997 05:00:00 GMT'); // Date in the past
-header('Last-Modified: ' . gmdate('D, d M Y H:i:s') . ' GMT'); // always modified
-header('Cache-Control: cache, must-revalidate'); // HTTP/1.1
-header('Pragma: public'); // HTTP/1.0
-
-$objWriter = PHPExcel_IOFactory::createWriter($objPHPExcel, 'Excel2007');
-$objWriter->save('php://output');
-exit;
+echo json_encode($response);

@@ -1,109 +1,52 @@
 <?php
-/**
- * PHPExcel
- *
- * Copyright (c) 2006 - 2015 PHPExcel
- *
- * This library is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * This library is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with this library; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301  USA
- *
- * @category   PHPExcel
- * @package    PHPExcel
- * @copyright  Copyright (c) 2006 - 2015 PHPExcel (http://www.codeplex.com/PHPExcel)
- * @license    http://www.gnu.org/licenses/old-licenses/lgpl-2.1.txt	LGPL
- * @version    ##VERSION##, ##DATE##
- */
 
-/** Error reporting */
-error_reporting(E_ALL);
-ini_set('display_errors', TRUE);
-ini_set('display_startup_errors', TRUE);
-date_default_timezone_set('Europe/London');
+// $a = [2, 3, 4, 5, 6];
+// end($a);
+// echo prev($a);
 
-define('EOL',(PHP_SAPI == 'cli') ? PHP_EOL : '<br />');
+// $dureem = 20; // durée d'emprunt en mois
+// $tauxa = 8.5 / 100; // taux annuel
+// $tauxm = $tauxa / 12; // taux périodique mensuel
+// $coef = 1 + $tauxm;
+// $proposition_mensualites = 1900000 * $tauxm * (pow($coef, $dureem) / (pow($coef, $dureem) - 1)); // 1500000 est le capital emprunté
 
-if (PHP_SAPI == 'cli')
-	die('This example should only be run from a Web Browser');
+// $proposition_mensualites += 148000; // 750 correspondant à l'assurance
 
-/** Include PHPExcel */
-require_once 'Classes/PHPExcel.php';
+// for ($taux = 8.5; $taux <= 9.000; $taux += 0.001) {
+//     $total = 0;
 
-//Database Connection
-$pdo = new PDO('oci:dbname=192.168.0.20:1521/cgbk', 'BRUCE', 'BRUCE123');  
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+//     for ($nb_mois = 1; $nb_mois <= 20; $nb_mois++) {
+//         $total += ($proposition_mensualites / pow((1 + ($taux / 100)), ($nb_mois / 12)));
+//     }
 
-// Create new PHPExcel object
-$objReader = PHPExcel_IOFactory::createReader('Excel2007');
-// $objPHPExcel = $objReader->load("templates/template_ods_ifrs.xlsx");
+//     if ($total > 1900000) {
+//         $teg = $taux;
+//         break;
+//     }
+// }
+// echo '<br>teg:' . $teg;
 
 
-// // Set document properties
-// $objPHPExcel->getProperties()->setCreator("Maarten Balliauw")
-// ->setLastModifiedBy("Maarten Balliauw")
-// ->setTitle("Office 2007 XLSX Test Document")
-// ->setSubject("Office 2007 XLSX Test Document")
-// ->setDescription("Test document for Office 2007 XLSX, generated using PHP classes.")
-// ->setKeywords("office 2007 openxml php")
-// ->setCategory("Test result file");
+$s = 0;
 
-//dco
-
-if(isset($_POST['month'])){
-    $month = $_POST['month'];
-    $year = $_POST['year'];
-} else{
-    $month = 6;
-    $year = 2018;
+for($i=1;$i<=10;$i++){
+    
+    $s= $i+$s;
 }
 
-$q_dco = $pdo->prepare("SELECT TO_CHAR(max(dco),'DD-MON-YYYY') d from prod.bksld where cha like '205%' and prod.month(dco)=? and prod.year(dco)=?");
-
-$q_dco->execute(array($month,$year));
-
-$r = $q_dco->fetch(PDO::FETCH_ASSOC);
-$dco = $r['D'];
+echo $s;
 
 
-// CHA
-$query = "SELECT * from CLEARINGUSER.IFRS9_ODS where prod.month(dco) = ? and prod.year(dco)= ?";
 
-$stmt = $pdo->prepare($query); 
-$age_name = array();
-$ncp = array();
-$currency = array();
-$cli_id = array();
-$names = array();
-$maut = array();
-$balance = array();
-$inter_susp = array();
-$start_date = array();
-$end_date = array();
-$tau = array();
-$class = array();
-$ndaysarr = array();
-$net_a_provisioner = array();
 
-if ($stmt->execute(array(
-    $month, $year
-))){
-    $i = 0;
-    $j = 0;
-    $prev_inter = 0;
-    $prev_cli = '';
-    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-        $names[] = (string)trim($row['NAMES']);
-    }
-}
+<?php
+header("Content-Type: application/json");
+header("Access-Control-Allow-Origin: *");
 
-var_dump($names);
+
+
+$response->result=true;
+$response->message = 'Successful';
+
+
+echo json_encode($response);

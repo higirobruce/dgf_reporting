@@ -31,7 +31,7 @@ ini_set('display_errors', true);
 ini_set('display_startup_errors', true);
 date_default_timezone_set('Europe/London');
 
-define('EOL', (PHP_SAPI == 'cli') ? PHP_EOL : '<br />');
+define('EOL', (PHP_SAPI == 'cli') ?PHP_EOL : '<br />');
 
 if (PHP_SAPI == 'cli') {
     die('This example should only be run from a Web Browser');
@@ -81,20 +81,23 @@ main.agio_cdt_march,
 main.newcla,
 main.ndaysarr,
 nvl(main.loan_amount * exRate.tind, aut.maut * exRate.tind) LOAN_AMOUNT,
-nvl(main.start_date,aut.debut) START_DATE,
-nvl(main.end_date,aut.fin) END_DATE,
-nvl(main.tau, k.tau) TAU,
+nvl(nvl(main.start_date,aut.debut),sysdate-365) START_DATE,
+nvl(nvl(main.end_date,aut.fin),sysdate) END_DATE,
+nvl(nvl(main.tau, k.tau),0) TAU,
 nvl(nvl(main.LIBE,aut.LIBT),'AUTRES CREDITS M.T') LIBE,
-inst.map * exRate.tind installment,
-chap.lib cha_lib from (
+nvl(main.installement * exRate.tind ,nvl(main.loan_amount * exRate.tind, aut.maut * exRate.tind)) installment,
+chap.lib cha_lib,
+main.CONTRACT_ID,
+seg.segment,
+cat.category
+ from (
     select
     distinct
     ag.lib,
-    main.*
-    ,
+    main.*,
     dos_2.loan_amount
     ,dos_2.start_date,
-    dos_2.end_date, dos_2.tau, dos_2.LIBE
+    dos_2.end_date, dos_2.tau, dos_2.LIBE,dos_2.CONTRACT_ID,dos_2.typ,dos_2.installement
     from (
         select * from (select
 distinct
@@ -139,34 +142,29 @@ group by cli) int_npl on int_npl.cli = a.cli
 left join (SELECT a.cha,trim(chap_his.cha_old) cha2, a.cli,sum(a.sdecv) sdecv from prod.bksld a
 left join clearinguser.npl_cha_chang_his chap_his on trim(a.ncp) = trim(chap_his.ncp) and trim(chap_his.cha_old) = '219010'
 where a.dco=?
---and (a.cha in ('219010') or chap_his.cha_old in ('219010')) --and a.sde<0 and
-group by a.cli,a.cha,chap_his.cha_old ) agio_cd_march on agio_cd_march.cli = a.cli and (agio_cd_march.cha='219010' or agio_cd_march.cha2='219010')
+and (a.cha in ('219010')) and a.sde<0  --or chap_his.cha_old in ('219010')) --and
+group by a.cli,a.cha,chap_his.cha_old ) agio_cd_march on agio_cd_march.cli = a.cli --and (agio_cd_march.cha='219010' or agio_cd_march.cha2='219010')
 
 left join PROD.MISNEWCLASSFINAL cl on trim(a.cli) = trim(cl.cli)
 where a.dco=? and
-    (a.cha in ('211100','211110','211120','211180','211190',
-        '213915','215110','215120','215140','216110',
-        '216115','217110','217120','217130','217140',
-        '217170','217180','217190','217210','217300',
-        '218000','222110','222155','222210','222220',
-        '222270','222280','222310','225110','225114',
-        '226110','227000','231010','231090','231091',
-        '235190','235191','235800','241010','241014',
-        '241020','241040','241070','241080','241090',
-        '241091','241110','241120','241140','241170',
-        '241180','241190','241191','241610','241900',
-        '242010','243000','291450','291550','213122','222180','222120'
-        )
-      or (a.cha in ('291340','291330','291320',
-                    '291410',
-                    '291430','291440',
-                    '291510','291530','291540',
-                    '291610','291120','291220')
-            and trim(chap_his.cha_old) not in ('219200','229200','239200','249200','291340','291330','291320',
-                    '291410','291430','291440','291510','291530',
-                    '291540','291610','291120','291220')
-        )
+    (a.cha in ('211110','211120','211180','211190','213915','215110','215120','215140','215180','216110','216115',
+        '217110','217120','217130','217140','217170','217180','217190','217210','217300','218000','222155',
+        '222210','222220','222270','222280','222310','225110','225114','226110','227000','231010','231090',
+        '231091','235190','235191','235800','241010','241014','241020','241040','241070','241080','241090',
+        '241091','241110','241120','241140','241170','241180','241190','241191','241610','241900','242010',
+        '243000','213122','291330','291430','291530','291120','291220','291320','291450','291550','291340',
+        '291440','291540','291410','291510','291610')
+    --   or (a.cha in ('291340','291330','291320',
+    --                 '291410',
+    --                 '291430','291440',
+    --                 '291510','291530','291540',
+    --                 '291610','291120','291220')
+    --         and trim(chap_his.cha_old) not in ('219200','229200','239200','249200','291340','291330','291320',
+    --                 '291410','291430','291440','291510','291530',
+    --                 '291540','291610','291120','291220')
+    --     )
     )
+    and a.cha not in ('219200','229200','239200','249200')
 )
     ) main
     join prod.bkage ag on ag.age = main.age
@@ -177,7 +175,8 @@ where a.dco=? and
     cpt.ncp,dossier.eve,
     dossier.mon loan_amount
     ,dossier.dmep start_date,
-    dossier.ddec end_date, dossier.tau_int tau, typrt.LIBE
+    dossier.ddec end_date, dossier.tau_int tau, typrt.LIBE,trim(dos.eve)||trim(dos.typ)||trim(dos.ope)||trim(dos.age) contract_id,dos.typ,
+    echprt1.installement
     from prod.bkcptprt cpt
     join prod.mis_bkdosprteom dos on dos.eve=cpt.eve and dos.ave=cpt.ave and dos.ctr in ('1','5') and dos.eta='VA'
     left join (select cli,typ,max(ddec) ddec from prod.mis_bkdosprteom
@@ -189,8 +188,10 @@ where a.dco=? and
         and dos_2.eve=dos.eve and dos_2.ave=dos.ave and dos_2.dmep=dos_3.dmep
     left join prod.bktyprt typrt on typrt.typ = dos.typ
     join prod.bkdosprt dossier on dossier.eve = cpt.eve and dossier.eve = cpt.eve
+    join (select eve, max(tot_ech) installement from prod.bkechprt group by eve) echprt1 on echprt1.eve = dossier.eve --and echprt1.ave = dossier.ave
     where cpt.nat='004'
     ) dos_2 on main.ncp=dos_2.ncp
+
 ) main
 left join (Select dev, max(dco) dco, tind from prod.bktau where prod.month(dco)=? and prod.year(dco)=? group by dev,tind) exRate on exRate.dev = main.dev
 left join (Select ncp,maut,debut,fin, 'CREDIT MARCHE' LIBT from prod.bkautc) aut on main.ncp = aut.ncp
@@ -230,6 +231,10 @@ left join clearinguser.npl_cha_chang_his chap_his on main.ncp = chap_his.ncp and
 
 left join prod.bkchap chap on main.cha = chap.cha or  trim(chap.cha) = trim(chap_his.cha_old)
 
+LEFT JOIN clearinguser.cli_segment seg ON TRIM(main.cli) = TRIM(seg.cli)
+
+left join CLEARINGUSER.loan_categories cat on cat.typ = main.typ
+
 where (sdecv<0 or
 (
     sdecv >= 0 and (
@@ -240,7 +245,7 @@ where (sdecv<0 or
             com_imp_npl <>0 or int_imp_npl <>0 or prov_int <>0
     )
 ) )
--- and main.cli='0000746'
+--and main.cli='0000746'
 
 order by main.cli,main.sdecv,main.ncp desc";
 
@@ -274,6 +279,10 @@ $inst = array();
 $cha_lib = array();
 $prov_int = array();
 $agio_cdt_march = array();
+$contract_id = array();
+$loan_category = array();
+$segment = array();
+$base_prov = array();
 
 if ($stmt->execute(array(
     $dco, $dco, $dco,
@@ -296,148 +305,165 @@ if ($stmt->execute(array(
     $prev_amount = 0;
     $prev_prov_int = 0;
     $prev_agio = 0;
-    $dont_set = false;
-    $unset = 0;
     while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 
-        if ((($prev_cli == (string) trim($row['CLI']) && $prev_res == $row['SDECV'] && $prev_ncp == $row['NCP']) || $row['SDECV'] > 0) || is_null($row['SDECV'])) {
+        if (($prev_cli == (string)trim($row['CLI']) && $prev_res == $row['SDECV'] && $prev_ncp == $row['NCP'])) {
             $sdecv[] = 0;
-            $dont_set = true;
         } else {
-            $sdecv[] = abs((float) $row['SDECV']);
-            $dont_set = false;
+            if ($row['SDECV'] < 0)
+                $sdecv[] = abs((float)$row['SDECV']);
+            else
+                $sdecv[] = 0;
+            // $loan_amount[$i - 1] = $row['LOAN_AMOUNT'] + $prev_amount;
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_cap == $row['CAP_IMP']) || is_null($row['CAP_IMP'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_cap == $row['CAP_IMP']) {
             $cap_imp[] = 0;
-            $dont_set = true;
         } else {
-            $cap_imp[] = abs((float) $row['CAP_IMP']);
-            $dont_set = false;
+            $cap_imp[] = abs((float)$row['CAP_IMP']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_prov_int == $row['PROV_INT']) || is_null($row['PROV_INT'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_prov_int == $row['PROV_INT']) {
             $prov_int[] = 0;
-            $dont_set = true;
         } else {
-            $prov_int[] = abs((float) $row['PROV_INT']);
-            $dont_set = false;
+            $prov_int[] = abs((float)$row['PROV_INT']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_int == $row['INT_IMP']) || is_null($row['INT_IMP'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_int == $row['INT_IMP']) {
             $int_imp[] = 0;
-            $dont_set = true;
         } else {
-            $int_imp[] = abs((float) $row['INT_IMP']);
-            $dont_set = false;
+            $int_imp[] = abs((float)$row['INT_IMP']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_int_npl == $row['INT_IMP_NPL']) || is_null($row['INT_IMP_NPL'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_int_npl == $row['INT_IMP_NPL']) {
             $int_imp_npl[] = 0;
-            $dont_set = true;
         } else {
-            $int_imp_npl[] = abs((float) $row['INT_IMP_NPL']);
-            $dont_set = false;
+            $int_imp_npl[] = abs((float)$row['INT_IMP_NPL']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_com == $row['COMM_IMP']) || is_null($row['COMM_IMP'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_com == $row['COMM_IMP']) {
             $comm_imp[] = 0;
-            $dont_set = true;
         } else {
-            $comm_imp[] = abs((float) $row['COMM_IMP']);
-            $dont_set = false;
+            $comm_imp[] = abs((float)$row['COMM_IMP']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_com_npl == $row['COM_IMP_NPL']) || is_null($row['COM_IMP_NPL'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_com_npl == $row['COM_IMP_NPL']) {
             $comm_imp_npl[] = 0;
-            $dont_set = true;
         } else {
-            $comm_imp_npl[] = abs((float) $row['COM_IMP_NPL']);
-            $dont_set = false;
+            $comm_imp_npl[] = abs((float)$row['COM_IMP_NPL']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_capn == $row['CAP_IMP_NPL']) || is_null($row['CAP_IMP_NPL'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_capn == $row['CAP_IMP_NPL']) {
             $cap_imp_npl[] = 0;
-            $dont_set = true;
         } else {
-            $cap_imp_npl[] = abs((float) $row['CAP_IMP_NPL']);
-            $dont_set = false;
+            $cap_imp_npl[] = abs((float)$row['CAP_IMP_NPL']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_agio == $row['AGIO_CDT_MARCH']) || is_null($row['AGIO_CDT_MARCH'])) {
+        if ($prev_cli == (string)trim($row['CLI']) && $prev_agio == $row['AGIO_CDT_MARCH']) {
             $agio_cdt_march[] = 0;
-            $dont_set = true;
         } else {
-            $agio_cdt_march[] = abs((float) $row['AGIO_CDT_MARCH']);
-            $dont_set = false;
+            $agio_cdt_march[] = abs((float)$row['AGIO_CDT_MARCH']);
         }
 
-        if (($prev_cli == (string) trim($row['CLI']) && $prev_amount == $row['LOAN_AMOUNT']) || is_null($row['LOAN_AMOUNT'])) {
-            $loan_amount[] = 0;
-            $dont_set = true;
-        } else {
-            $loan_amount[] = abs((float) $row['LOAN_AMOUNT']);
-            $dont_set = false;
-        }
-
-        $lib[] = (string) trim($row['LIB']);
-        $age[] = (double) $row['AGE'];
-        $cli[] = (string) trim($row['CLI']);
-        $ncp[] = (string) $row['NCP'];
-        $nomrest[] = (string) trim($row['NOMREST']);
-        $dev[] = (int) $row['DEV'];
-        $cha[] = $row['CHA'];
+        $lib[] = (string)trim($row['LIB']);
+        $age[] = (string)$row['AGE'];
+        $cli[] = (string)trim($row['CLI']);
+        $ncp[] = (string)$row['NCP'];
+        $nomrest[] = (string)trim($row['NOMREST']);
+        $dev[] = (string)$row['DEV'];
+        $cha[] = (string)$row['CHA'];
         $newcla[] = $row['NEWCLA'];
 
         $ndaysarr[] = $row['NDAYSARR'];
-        $inst[] = $row['INSTALLMENT'];
+        $inst[] = (float)$row['INSTALLMENT'];
         $cha_lib[] = $row['CHA_LIB'];
 
         $start_date[] = $row['START_DATE'];
         $end_date[] = $row['END_DATE'];
         $tau[] = $row['TAU'];
         $libe[] = trim($row['LIBE']);
+        $contract_id[] = trim($row['CONTRACT_ID']);
+        $loan_category[] = trim($row['CATEGORY']);
+        $loan_amount[] = (float)$row['LOAN_AMOUNT'];
+        $segment[] = trim($row['SEGMENT']);
 
-        if ($dont_set == true) {
-            array_pop($sdecv);
-            array_pop($cap_imp);
-            array_pop($prov_int);
-            array_pop($int_imp);
-            array_pop($int_imp_npl);
-            array_pop($comm_imp);
-            array_pop($comm_imp_npl);
-            array_pop($cap_imp_npl);
-            array_pop($agio_cdt_march);
+        $prev_amount = (float)$row['LOAN_AMOUNT'];
+        $prev_ncp = (string)$row['NCP'];
+        $prev_cli = (string)trim($row['CLI']);
+        $prev_res = (float)$row['SDECV'];
+        $prev_cap = (float)$row['CAP_IMP'];
+        $prev_com = (float)$row['COMM_IMP'];
+        $prev_com_npl = (float)$row['COM_IMP_NPL'];
+        $prev_int = (float)$row['INT_IMP'];
+        $prev_int_npl = (float)$row['INT_IMP_NPL'];
+        $prev_capn = (float)$row['CAP_IMP_NPL'];
+        $prev_prov_int = (float)$row['PROV_INT'];
+        $prev_agio = (float)$row['AGIO_CDT_MARCH'];
+
+        if ((int)$row['NEWCLA'] == 1 || (int)$row['NEWCLA'] == 2) {
+            $base_prov[] = abs(end($sdecv)) + abs(end($cap_imp)) + abs(end($cap_imp_npl)) + abs(end($int_imp)) + abs(end($int_imp_npl)) +
+                abs(end($comm_imp)) + abs(end($comm_imp_npl)) + abs(end($prov_int));
+        } else {
+            $base_prov[] = abs(end($sdecv)) + abs(end($cap_imp)) + abs(end($cap_imp_npl));
+        }
+
+        if (empty(end($inst))) {
+            array_pop($inst);
+            $inst[] = end($base_prov);
+        }
+
+        if (empty(end($loan_amount))) {
             array_pop($loan_amount);
+            $loan_amount[] = end($base_prov);
+        }
+
+
+        if (
+            end($sdecv) == 0
+            && end($cap_imp) == 0
+            && end($prov_int) == 0
+            && end($int_imp) == 0
+            && end($int_imp_npl) == 0
+            && end($comm_imp) == 0
+            && end($comm_imp_npl) == 0
+            && end($cap_imp_npl) == 0
+            && end($agio_cdt_march) == 0
+        ) {
+            array_pop($arr);
+            array_pop($ret);
             array_pop($lib);
             array_pop($age);
+            array_pop($cha);
             array_pop($cli);
             array_pop($ncp);
             array_pop($nomrest);
             array_pop($dev);
-            array_pop($cha);
+            array_pop($mon);
+            array_pop($sdecv);
+            array_pop($map);
+            array_pop($cap_imp);
+            array_pop($cap_imp_npl);
+            array_pop($int_imp);
+            array_pop($int_imp_npl);
+            array_pop($comm_imp);
+            array_pop($comm_imp_npl);
             array_pop($newcla);
-            array_pop($ndaysarr);
-            array_pop($inst);
-            array_pop($cha_lib);
+            array_pop($loan_amount);
             array_pop($start_date);
             array_pop($end_date);
             array_pop($tau);
             array_pop($libe);
+            array_pop($ndaysarr);
+            array_pop($inst);
+            array_pop($cha_lib);
+            array_pop($prov_int);
+            array_pop($agio_cdt_march);
+            array_pop($contract_id);
+            array_pop($loan_category);
+            array_pop($base_prov);
         }
 
-        $prev_amount = (float) $row['LOAN_AMOUNT'];
-        $prev_ncp = (string) $row['NCP'];
-        $prev_cli = (string) trim($row['CLI']);
-        $prev_res = (float) $row['SDECV'];
-        $prev_cap = (float) $row['CAP_IMP'];
-        $prev_com = (float) $row['COMM_IMP'];
-        $prev_com_npl = (float) $row['COM_IMP_NPL'];
-        $prev_int = (float) $row['INT_IMP'];
-        $prev_int_npl = (float) $row['INT_IMP_NPL'];
-        $prev_capn = (float) $row['CAP_IMP_NPL'];
-        $prev_prov_int = (float) $row['PROV_INT'];
-        $prev_agio = (float) $row['AGIO_CDT_MARCH'];
+        $i++;
     }
 }
 
@@ -580,7 +606,14 @@ $objPHPExcel->setActiveSheetIndex(0)
         null,
         'P6'
     );
-unset($agio_cdt_march);
+
+$objPHPExcel->setActiveSheetIndex(0)
+    ->fromArray(
+        array_chunk($base_prov, 1),
+        null,
+        'Q6'
+    );
+unset($base_prov);
 
 $objPHPExcel->setActiveSheetIndex(0)
     ->fromArray(
@@ -652,6 +685,30 @@ $objPHPExcel->setActiveSheetIndex(0)
         'Z6'
     );
 unset($cha_lib);
+
+$objPHPExcel->setActiveSheetIndex(0)
+    ->fromArray(
+        array_chunk($contract_id, 1),
+        null,
+        'AE6'
+    );
+unset($contract_id);
+
+$objPHPExcel->setActiveSheetIndex(0)
+    ->fromArray(
+        array_chunk($loan_category, 1),
+        null,
+        'AF6'
+    );
+unset($loan_category);
+
+$objPHPExcel->setActiveSheetIndex(0)
+    ->fromArray(
+        array_chunk($segment, 1),
+        null,
+        'AG6'
+    );
+unset($segment);
 
 $months_names = array();
 
